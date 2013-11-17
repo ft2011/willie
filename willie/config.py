@@ -293,7 +293,7 @@ class Config(object):
             ' When done, hit enter again.'
         self.add_list('core', 'channels', c, 'Channel:')
 
-        k = 'Enter the blowfish keys for each channel.' + \
+        k = 'Enter the blowfish keys for each channel. Use \"-\" for none.' + \
             ' When done, hit enter again.'
         self.add_list('core', 'blowfish_keys', k, 'Key:')
 

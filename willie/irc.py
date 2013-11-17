@@ -86,8 +86,6 @@ class Bot(asynchat.async_chat):
         self.channels = []
         """The list of channels Willie is currently in."""
 
-        self.blowfish_keys = []
-
         self.stack = []
         self.ca_certs = ca_certs
         self.hasquit = False
@@ -114,9 +112,12 @@ class Bot(asynchat.async_chat):
         half-ops and ops.
         """
 
-        self.chanKeys = dict()
+        blowfishKeys = config.get_list("blowfish_keys")
+        blowfishChans = config.get_list("channels")
+        self.blowfishChanKeys = dict(zip(blowfishChans, blowfishKeys))
         """
-        A dictionary mapping channels to a their blowfish keys.
+        A dictionary mapping channels to their blowfish keys.
+        i guess, this not right place to do this...
         """
 
         #We need this to prevent error loops in handle_error
@@ -413,7 +414,6 @@ class Bot(asynchat.async_chat):
                     return
         if data:
             self.log_raw(data, '<<')
-
         self.buffer += data
 
     def found_terminator(self):
@@ -443,16 +443,12 @@ class Bot(asynchat.async_chat):
             argstr, text = line.split(' :', 1)
             args = argstr.split()            
 
-            # Decryption
+            # Blowfish Decryption
             if (len(args) > 1) and (args[0] == "PRIVMSG"):
-                # definitely not right place...
-                self.blowfish_keys = self.config.core.get_list("blowfish_keys")
-                self.channels = self.config.core.get_list("channels")
-                self.chanKeys = dict(zip(self.channels, self.blowfish_keys))
-                if args[1] in self.chanKeys:
+                if (args[1] in self.blowfishChanKeys) and (self.blowfishChanKeys[args[1]] != "-"):
                     tmp = str(unicode(text).encode("ascii", "ignore"))
                     if tmp.startswith("+OK "):
-                        text = BlowfishIRC().decrypt(tmp[4:], self.chanKeys[args[1]])
+                        text = BlowfishIRC().decrypt(tmp[4:], self.blowfishChanKeys[args[1]])
                     else:
                         # ignore, return?
                         return
@@ -518,15 +514,10 @@ class Bot(asynchat.async_chat):
                 if messages.count('...') >= 3:
                     return
 
-            # Encryption
-            # definitely not right place...
-            self.blowfish_keys = self.config.core.get_list("blowfish_keys")
-            self.channels = self.config.core.get_list("channels")
-            self.chanKeys = dict(zip(self.channels, self.blowfish_keys))          
-
-            if recipient in self.chanKeys:
-                key = str(self.chanKeys[recipient]).strip()
-                text = str(BlowfishIRC().encrypt(text.strip(), key))
+            # Blowfish Encryption
+            if (recipient in self.blowfishChanKeys) and (self.blowfishChanKeys[recipient] != "-"):
+                key = str(self.blowfishChanKeys[recipient]).strip()
+                text = str(BlowfishIRC().encrypt(text.replace("\n", ""), key))
                 text = "+OK {}".format(text)
 
             self.write(('PRIVMSG', recipient), text)
