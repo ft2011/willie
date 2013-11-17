@@ -293,6 +293,10 @@ class Config(object):
             ' When done, hit enter again.'
         self.add_list('core', 'channels', c, 'Channel:')
 
+        k = 'Enter the blowfish keys for each channel.' + \
+            ' When done, hit enter again.'
+        self.add_list('core', 'blowfish_keys', k, 'Key:')
+
     def _db(self):
         db.configure(self)
         self.save()

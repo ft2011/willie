@@ -22,7 +22,7 @@ import asynchat
 import os
 import codecs
 import traceback
-from tools import stderr, Nick
+from tools import stderr, Nick, BlowfishIRC
 try:
     import select
     import ssl
@@ -86,6 +86,8 @@ class Bot(asynchat.async_chat):
         self.channels = []
         """The list of channels Willie is currently in."""
 
+        self.blowfish_keys = []
+
         self.stack = []
         self.ca_certs = ca_certs
         self.hasquit = False
@@ -110,6 +112,11 @@ class Bot(asynchat.async_chat):
         """
         A dictionary mapping channels to a ``Nick`` list of their voices,
         half-ops and ops.
+        """
+
+        self.chanKeys = dict()
+        """
+        A dictionary mapping channels to a their blowfish keys.
         """
 
         #We need this to prevent error loops in handle_error
@@ -404,9 +411,9 @@ class Bot(asynchat.async_chat):
                 except:
                     # Discard line if encoding is unknown
                     return
-
         if data:
             self.log_raw(data, '<<')
+
         self.buffer += data
 
     def found_terminator(self):
@@ -434,8 +441,24 @@ class Bot(asynchat.async_chat):
 
         if ' :' in line:
             argstr, text = line.split(' :', 1)
-            args = argstr.split()
+            args = argstr.split()            
+
+            # Decryption
+            if (len(args) > 1) and (args[0] == "PRIVMSG"):
+                # definitely not right place...
+                self.blowfish_keys = self.config.core.get_list("blowfish_keys")
+                self.channels = self.config.core.get_list("channels")
+                self.chanKeys = dict(zip(self.channels, self.blowfish_keys))
+                if args[1] in self.chanKeys:
+                    tmp = str(unicode(text).encode("ascii", "ignore"))
+                    if tmp.startswith("+OK "):
+                        text = BlowfishIRC().decrypt(tmp[4:], self.chanKeys[args[1]])
+                    else:
+                        # ignore, return?
+                        return
+
             args.append(text)
+                
         else:
             args = line.split()
             text = args[-1]
@@ -494,6 +517,17 @@ class Bot(asynchat.async_chat):
                 text = '...'
                 if messages.count('...') >= 3:
                     return
+
+            # Encryption
+            # definitely not right place...
+            self.blowfish_keys = self.config.core.get_list("blowfish_keys")
+            self.channels = self.config.core.get_list("channels")
+            self.chanKeys = dict(zip(self.channels, self.blowfish_keys))          
+
+            if recipient in self.chanKeys:
+                key = str(self.chanKeys[recipient]).strip()
+                text = str(BlowfishIRC().encrypt(text.strip(), key))
+                text = "+OK {}".format(text)
 
             self.write(('PRIVMSG', recipient), text)
             self.stack.append((time.time(), self.safe(text)))
